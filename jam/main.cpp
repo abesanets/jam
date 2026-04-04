@@ -19,6 +19,83 @@
 
 const int KEY_ESC = 27;
 
+// Читает один логический символ с клавиатуры и нормализует его.
+// Консоль в UTF-8: русские буквы приходят двумя байтами (0xD0/0xD1 + второй байт).
+// Возвращает латинскую строчную букву для русских клавиш, иначе сам символ.
+static int normalizeKey(int first) {
+    unsigned char b1 = (unsigned char)first;
+
+    // UTF-8 двухбайтовая последовательность — читаем второй байт
+    if (b1 == 0xD0 || b1 == 0xD1) {
+        unsigned char b2 = (unsigned char)_getch();
+        // Маппинг UTF-8 кириллица -> физическая QWERTY-клавиша (латиница строчная)
+        // Формат: {b1, b2, lat}
+        static const struct { unsigned char c1, c2; char lat; } map[] = {
+            {0xD0,0xB9,'q'}, // й
+            {0xD1,0x86,'w'}, // ц
+            {0xD1,0x83,'e'}, // у
+            {0xD0,0xBA,'r'}, // к
+            {0xD0,0xB5,'t'}, // е
+            {0xD0,0xBD,'y'}, // н
+            {0xD0,0xB3,'u'}, // г
+            {0xD1,0x88,'i'}, // ш
+            {0xD1,0x89,'o'}, // щ
+            {0xD0,0xB7,'p'}, // з
+            {0xD1,0x84,'a'}, // ф
+            {0xD1,0x8B,'s'}, // ы
+            {0xD0,0xB2,'d'}, // в
+            {0xD0,0xB0,'f'}, // а
+            {0xD0,0xBF,'g'}, // п
+            {0xD1,0x80,'h'}, // р
+            {0xD0,0xBE,'j'}, // о
+            {0xD0,0xBB,'k'}, // л
+            {0xD0,0xB4,'l'}, // д
+            {0xD1,0x8F,'z'}, // я
+            {0xD1,0x87,'x'}, // ч
+            {0xD1,0x81,'c'}, // с
+            {0xD0,0xBC,'v'}, // м
+            {0xD0,0xB8,'b'}, // и
+            {0xD1,0x82,'n'}, // т
+            {0xD1,0x8C,'m'}, // ь
+            // Заглавные
+            {0xD0,0x99,'q'}, // Й
+            {0xD0,0xA6,'w'}, // Ц
+            {0xD0,0xA3,'e'}, // У
+            {0xD0,0x9A,'r'}, // К
+            {0xD0,0x95,'t'}, // Е
+            {0xD0,0x9D,'y'}, // Н
+            {0xD0,0x93,'u'}, // Г
+            {0xD0,0xA8,'i'}, // Ш
+            {0xD0,0xA9,'o'}, // Щ
+            {0xD0,0x97,'p'}, // З
+            {0xD0,0xA4,'a'}, // Ф
+            {0xD0,0xAB,'s'}, // Ы
+            {0xD0,0x92,'d'}, // В
+            {0xD0,0x90,'f'}, // А
+            {0xD0,0x9F,'g'}, // П
+            {0xD0,0xA0,'h'}, // Р
+            {0xD0,0x9E,'j'}, // О
+            {0xD0,0x9B,'k'}, // Л
+            {0xD0,0x94,'l'}, // Д
+            {0xD0,0xAF,'z'}, // Я
+            {0xD0,0xA7,'x'}, // Ч
+            {0xD0,0xA1,'c'}, // С
+            {0xD0,0x9C,'v'}, // М
+            {0xD0,0x98,'b'}, // И
+            {0xD0,0xA2,'n'}, // Т
+            {0xD0,0xAC,'m'}, // Ь
+            {0,0,0}
+        };
+        for (int i = 0; map[i].c1; ++i)
+            if (map[i].c1 == b1 && map[i].c2 == b2) return map[i].lat;
+        return -1; // неизвестная последовательность
+    }
+
+    // Обычная латиница — привести к нижнему регистру
+    if (first >= 'A' && first <= 'Z') return first + 32;
+    return first;
+}
+
 // ============================================================
 // Экран: Добавление нового заказа
 // ============================================================
@@ -97,16 +174,16 @@ void screenViewOrders(OrderManager& om, const std::string& masterName) {
             UIManager::drawOrdersTable(orders, 6);
         }
 
-        int ch = _getch();
+        int ch = normalizeKey(_getch());
         if (ch == KEY_ESC) return;
-        if      (ch == 'm' || ch == 'M') { myOnly = !myOnly; }
-        else if (ch == 'd' || ch == 'D') { sortMode = (sortMode + 1) % 3; }
-        else if (ch == 'v' || ch == 'V') { showIssued = !showIssued; statusFilter = ""; sortMode = 0; }
-        else if (ch == 'r' || ch == 'R') { statusFilter = ""; sortMode = 0; showIssued = false; myOnly = false; }
+        if      (ch == 'm') { myOnly = !myOnly; }
+        else if (ch == 'd') { sortMode = (sortMode + 1) % 3; }
+        else if (ch == 'v') { showIssued = !showIssued; statusFilter = ""; sortMode = 0; }
+        else if (ch == 'r') { statusFilter = ""; sortMode = 0; showIssued = false; myOnly = false; }
         else if (!showIssued) {
-            if      (ch == 'n' || ch == 'N') statusFilter = (statusFilter == "Новый")    ? "" : "Новый";
-            else if (ch == 'w' || ch == 'W') statusFilter = (statusFilter == "В работе") ? "" : "В работе";
-            else if (ch == 'g' || ch == 'G') statusFilter = (statusFilter == "Готов")    ? "" : "Готов";
+            if      (ch == 'n') statusFilter = (statusFilter == "Новый")    ? "" : "Новый";
+            else if (ch == 'w') statusFilter = (statusFilter == "В работе") ? "" : "В работе";
+            else if (ch == 'g') statusFilter = (statusFilter == "Готов")    ? "" : "Готов";
         }
     }
 }
@@ -137,7 +214,7 @@ void screenManageOrder(OrderManager& om, int id, const std::string& masterName) 
         }
         UIManager::printCentered(menuRow++, "  [ESC] Назад          ", Color::DEFAULT);
 
-        int ch = _getch();
+        int ch = normalizeKey(_getch());
         if (ch == KEY_ESC) return;
 
         if (isOwner && ch == '1') {
@@ -190,8 +267,8 @@ void screenManageOrder(OrderManager& om, int id, const std::string& masterName) 
             UIManager::clearScreen();
             UIManager::printCentered(3, "Удалить заказ #" + std::to_string(o->id) + " — " + o->clientName + "?", Color::OVERDUE);
             UIManager::printCentered(5, "  [Y] Да, удалить   [N / ESC] Отмена  ", Color::MENU);
-            int conf = _getch();
-            if (conf == 'y' || conf == 'Y') {
+            int conf = normalizeKey(_getch());
+            if (conf == 'y') {
                 om.deleteOrder(id);
                 UIManager::printSuccess(7, "Заказ удалён.");
                 UIManager::waitKey(9);
@@ -241,12 +318,12 @@ void screenManageOrders(OrderManager& om, const std::string& masterName) {
         UIManager::printCentered(tableBottom + 1, "  Введите ID заказа:", Color::MENU);
 
         UIManager::showCursor();
-        int first = _getch();
+        int first = normalizeKey(_getch());
         UIManager::hideCursor();
 
         if (first == KEY_ESC) return;
-        if (first == 'v' || first == 'V') { showIssued = !showIssued; continue; }
-        if (first == 'm' || first == 'M') { myOnly = !myOnly; continue; }
+        if (first == 'v') { showIssued = !showIssued; continue; }
+        if (first == 'm') { myOnly = !myOnly; continue; }
         if (first < '0' || first > '9') continue;
 
         std::string idStr(1, (char)first);
@@ -392,7 +469,7 @@ void screenRegister(UserManager& um) {
 void screenMainMenu(const std::string& login, const std::string& masterName, OrderManager& om) {
     while (true) {
         UIManager::drawMainMenuFull(masterName);
-        int ch = _getch();
+        int ch = normalizeKey(_getch());
         if      (ch == KEY_ESC) return;
         else if (ch == '1') screenAddOrder(om, masterName);
         else if (ch == '2') screenViewOrders(om, masterName);
@@ -414,7 +491,7 @@ void screenStart(UserManager& um, OrderManager& om) {
         UIManager::drawLogo(startRow);
         UIManager::drawStartMenu(startRow + 12);
 
-        int ch = _getch();
+        int ch = normalizeKey(_getch());
         if (ch == KEY_ESC) {
             UIManager::clearScreen();
             UIManager::printCentered(sz.Y / 2, "До свидания! Спасибо за использование J.A.M.", Color::LOGO);
