@@ -115,9 +115,10 @@ public:
         setColor(Color::DEFAULT);
         result.clear();
         while (true) {
+            int rw = visualWidth(result);
             setCursor(col + lw, row);
             std::cout << result << ' ';
-            setCursor(col + lw + (int)result.size(), row);
+            setCursor(col + lw + rw, row);
             int ch = _getch();
             if (ch == 27) { hideCursor(); return false; }
             if (ch == 13) { hideCursor(); return true;  }
@@ -127,6 +128,9 @@ public:
                     while (i > 0 && (result[i-1] & 0xC0) == 0x80) --i;
                     if (i > 0) --i;
                     result = result.substr(0, i);
+                    // затираем строку целиком (с запасом)
+                    setCursor(col + lw, row);
+                    std::cout << std::string(rw + 2, ' ');
                 }
             } else if (ch == 0 || ch == 224) {
                 _getch();
