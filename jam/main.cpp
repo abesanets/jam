@@ -466,6 +466,202 @@ void screenRegister(UserManager& um) {
         UIManager::printError(13, "Логин уже занят или поля пустые!");
     UIManager::waitKey(15);
 }
+
+// ============================================================
+// Вспомогательная функция: нижний регистр UTF-8 строки (для поиска)
+// ============================================================
+static std::string toLowerUTF8(const std::string& s) {
+    std::string r;
+    for (size_t i = 0; i < s.size(); ) {
+        unsigned char c = (unsigned char)s[i];
+        if (c < 0x80) {
+            r += (char)(c >= 'A' && c <= 'Z' ? c + 32 : c);
+            ++i;
+        } else if ((c & 0xE0) == 0xC0 && i + 1 < s.size()) {
+            unsigned char c2 = (unsigned char)s[i+1];
+            if (c == 0xD0 && c2 >= 0x90 && c2 <= 0xAF) { r += (char)0xD0; r += (char)(c2 + 0x20); i += 2; }
+            else if (c == 0xD0 && c2 == 0x81)           { r += (char)0xD1; r += (char)0x91;        i += 2; }
+            else { r += s[i++]; r += s[i++]; }
+        } else { r += s[i++]; }
+    }
+    return r;
+}
+
+// forward declaration
+void screenManageOrder(OrderManager& om, int id, const std::string& masterName);
+
+// ============================================================
+// Экран: Поиск заказов
+// ============================================================
+void screenSearch(OrderManager& om, const std::string& masterName) {
+    while (true) {
+        UIManager::clearScreen();
+        UIManager::hideCursor();
+        UIManager::printCentered(1, "=== Поиск заказов ===", Color::LOGO);
+        UIManager::printHLine(2, 40, '-', Color::DIM);
+        UIManager::printCentered(4, "  [1]  По мастеру (выбор из списка)  ", Color::MENU);
+        UIManager::printCentered(5, "  [2]  По ID заказа                  ", Color::MENU);
+        UIManager::printCentered(6, "  [3]  По совпадению текста           ", Color::MENU);
+        UIManager::printCentered(8, "  [ESC] Назад  ", Color::DEFAULT);
+
+        int ch = _getch();
+        if (ch == KEY_ESC) return;
+        if (ch == 0 || ch == 224) { _getch(); continue; }
+        if (ch != '1' && ch != '2' && ch != '3') continue;
+
+        std::vector<Order> results;
+
+        // ---- По мастеру ----
+        if (ch == '1') {
+            std::vector<std::string> masters;
+            for (const auto& o : om.getAllOrders()) {
+                bool found = false;
+                for (const auto& m : masters) if (m == o.master) { found = true; break; }
+                if (!found && !o.master.empty()) masters.push_back(o.master);
+            }
+            if (masters.empty()) {
+                UIManager::clearScreen();
+                UIManager::printCentered(5, "Нет заказов с мастерами.", Color::DIM);
+                UIManager::waitKey(7);
+                continue;
+            }
+            int sel = 0;
+            bool picked = false;
+            while (true) {
+                UIManager::clearScreen();
+                UIManager::hideCursor();
+                UIManager::printCentered(1, "=== Выбор мастера ===", Color::LOGO);
+                UIManager::printCentered(3, "Стрелки — выбор, Enter — поиск, ESC — назад", Color::DIM);
+                for (int i = 0; i < (int)masters.size(); ++i) {
+                    WORD col = (i == sel) ? Color::HIGHLIGHT : Color::DEFAULT;
+                    UIManager::printCentered(5 + i, (i == sel ? " > " : "   ") + masters[i], col);
+                }
+                int k = _getch();
+                if (k == KEY_ESC) break;
+                if (k == 13) { picked = true; break; }
+                if (k == 0 || k == 224) {
+                    int k2 = _getch();
+                    if (k2 == 72 && sel > 0) --sel;
+                    if (k2 == 80 && sel < (int)masters.size()-1) ++sel;
+                }
+            }
+            if (!picked) continue;
+            for (const auto& o : om.getAllOrders())
+                if (o.master == masters[sel]) results.push_back(o);
+        }
+
+        // ---- По ID ----
+        else if (ch == '2') {
+            UIManager::clearScreen();
+            UIManager::hideCursor();
+            UIManager::printCentered(1, "=== Поиск по ID ===", Color::LOGO);
+            UIManager::printHLine(2, 30, '-', Color::DIM);
+            std::string idStr;
+            if (!UIManager::inputStringESC(4, "  Введите ID: ", idStr)) continue;
+            int id = 0;
+            try { id = std::stoi(idStr); } catch (...) {}
+            Order* o = om.findById(id);
+            if (o) results.push_back(*o);
+        }
+
+        // ---- По тексту ----
+        else {
+            UIManager::clearScreen();
+            UIManager::hideCursor();
+            UIManager::printCentered(1, "=== Поиск по тексту ===", Color::LOGO);
+            UIManager::printCentered(3, "Ищет по ФИО, телефону, описанию, мастеру", Color::DIM);
+            std::string query;
+            if (!UIManager::inputStringESC(5, "  Запрос: ", query)) continue;
+            std::string qLow = toLowerUTF8(query);
+            for (const auto& o : om.getAllOrders()) {
+                auto has = [&](const std::string& f) {
+                    return toLowerUTF8(f).find(qLow) != std::string::npos;
+                };
+                if (has(o.clientName) || has(o.phone) || has(o.description) || has(o.master))
+                    results.push_back(o);
+            }
+        }
+
+        // ---- Результаты со стрелочной навигацией ----
+        if (results.empty()) {
+            UIManager::clearScreen();
+            UIManager::printCentered(5, "Ничего не найдено.", Color::DIM);
+            UIManager::waitKey(7);
+            continue;
+        }
+
+        int sel = 0;
+        while (true) {
+            UIManager::clearScreen();
+            UIManager::hideCursor();
+            UIManager::printCentered(1, "=== Результаты: " + std::to_string(results.size()) + " ===", Color::LOGO);
+            UIManager::printCentered(2, "Стрелки — навигация  Enter — открыть  ESC — назад", Color::DIM);
+            UIManager::printHLine(3, 80, '-', Color::DIM);
+
+            COORD sz = UIManager::getConsoleSize();
+            const int C_ID=5,C_NAME=18,C_TEL=14,C_DESC=20,C_PRC=9,C_STS=10,C_DATE=12,C_DL=12,C_MST=16;
+            const int TW=C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL+C_MST;
+            int indent=(sz.X-TW)/2; if(indent<0)indent=0;
+
+            UIManager::setColor(Color::TABLE_HDR);
+            UIManager::setCursor(indent,4);                                                    std::cout<<"ID";
+            UIManager::setCursor(indent+C_ID,4);                                               std::cout<<"ФИО клиента";
+            UIManager::setCursor(indent+C_ID+C_NAME,4);                                        std::cout<<"Телефон";
+            UIManager::setCursor(indent+C_ID+C_NAME+C_TEL,4);                                  std::cout<<"Описание";
+            UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC,4);                           std::cout<<"Цена";
+            UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC,4);                     std::cout<<"Статус";
+            UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS,4);              std::cout<<"Приём";
+            UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE,4);       std::cout<<"Дедлайн";
+            UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL,4);  std::cout<<"Мастер";
+            UIManager::setCursor(indent,5); UIManager::setColor(Color::DIM);
+            std::cout<<std::string(TW,'-');
+
+            SYSTEMTIME st2; GetLocalTime(&st2);
+            int today2=st2.wYear*10000+st2.wMonth*100+st2.wDay;
+            auto d2i=[](const std::string& d)->int{
+                if(d.size()<10)return 0;
+                try{return std::stoi(d.substr(6,4))*10000+std::stoi(d.substr(3,2))*100+std::stoi(d.substr(0,2));}
+                catch(...){return 0;}
+            };
+
+            for(int i=0;i<(int)results.size();++i){
+                const Order& o=results[i];
+                std::ostringstream ps; ps<<std::fixed<<std::setprecision(2)<<o.price;
+                bool overdue=(d2i(o.deadline)>0&&d2i(o.deadline)<today2&&o.status!="Выдан");
+                WORD rowColor=(i==sel)?Color::HIGHLIGHT:(overdue?Color::OVERDUE:Color::DEFAULT);
+                if(i==sel){ UIManager::setCursor(indent-2,6+i); UIManager::setColor(Color::HIGHLIGHT); std::cout<<">"; }
+                UIManager::setColor(rowColor);
+                UIManager::setCursor(indent,6+i);                                                   std::cout<<o.id;
+                UIManager::setCursor(indent+C_ID,6+i);                                              std::cout<<UIManager::trimVisual(o.clientName,C_NAME-1);
+                UIManager::setCursor(indent+C_ID+C_NAME,6+i);                                       std::cout<<UIManager::trimVisual(o.phone,C_TEL-1);
+                UIManager::setCursor(indent+C_ID+C_NAME+C_TEL,6+i);                                 std::cout<<UIManager::trimVisual(o.description,C_DESC-1);
+                UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC,6+i);                          std::cout<<ps.str();
+                UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC,6+i);                    std::cout<<UIManager::trimVisual(o.status,C_STS-1);
+                UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS,6+i);             std::cout<<UIManager::trimVisual(o.dateReceived,C_DATE-1);
+                UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE,6+i);      std::cout<<UIManager::trimVisual(o.deadline.empty()?"—":o.deadline,C_DL-1);
+                UIManager::setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL,6+i); std::cout<<UIManager::trimVisual(o.master.empty()?"—":o.master,C_MST-1);
+            }
+
+            int k=_getch();
+            if(k==KEY_ESC) break;
+            if(k==13){
+                screenManageOrder(om,results[sel].id,masterName);
+                // обновляем список (заказ мог измениться/удалиться)
+                std::vector<Order> upd;
+                for(const auto& r:results){ Order* op=om.findById(r.id); if(op) upd.push_back(*op); }
+                results=upd;
+                if(results.empty()) break;
+                if(sel>=(int)results.size()) sel=(int)results.size()-1;
+            }
+            if(k==0||k==224){
+                int k2=_getch();
+                if(k2==72&&sel>0) --sel;
+                if(k2==80&&sel<(int)results.size()-1) ++sel;
+            }
+        }
+    }
+}
+
 void screenMainMenu(const std::string& login, const std::string& masterName, OrderManager& om) {
     while (true) {
         UIManager::drawMainMenuFull(masterName);
@@ -475,6 +671,7 @@ void screenMainMenu(const std::string& login, const std::string& masterName, Ord
         else if (ch == '2') screenViewOrders(om, masterName);
         else if (ch == '3') screenManageOrders(om, masterName);
         else if (ch == '4') screenStats(om);
+        else if (ch == '5') screenSearch(om, masterName);
     }
 }
 
@@ -496,6 +693,7 @@ void screenGuestMenu(OrderManager& om) {
         UIManager::printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
         UIManager::printCentered(menuRow++, "  [1]  Просмотр заказов         ", Color::MENU);
         UIManager::printCentered(menuRow++, "  [2]  Статистика               ", Color::MENU);
+        UIManager::printCentered(menuRow++, "  [3]  Поиск                    ", Color::MENU);
         UIManager::printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
         UIManager::printCentered(menuRow++, "  [ESC] Назад                   ", Color::DEFAULT);
 
@@ -503,6 +701,7 @@ void screenGuestMenu(OrderManager& om) {
         if      (ch == KEY_ESC) return;
         else if (ch == '1') screenViewOrders(om, "");
         else if (ch == '2') screenStats(om);
+        else if (ch == '3') screenSearch(om, "");
     }
 }
 
