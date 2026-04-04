@@ -205,6 +205,7 @@ public:
         printCentered(row++, std::string(26, '-'), Color::LOGO);
         printCentered(row++, "  [1]  Вход в систему   ", Color::MENU);
         printCentered(row++, "  [2]  Регистрация      ", Color::MENU);
+        printCentered(row++, "  [3]  Войти как гость  ", Color::DIM);
         printCentered(row++, "  [ESC] Выход           ", Color::DEFAULT);
         printCentered(row++, std::string(26, '-'), Color::LOGO);
     }

@@ -479,6 +479,34 @@ void screenMainMenu(const std::string& login, const std::string& masterName, Ord
 }
 
 // ============================================================
+// Экран: Гостевое меню (только просмотр)
+// ============================================================
+void screenGuestMenu(OrderManager& om) {
+    while (true) {
+        UIManager::clearScreen();
+        UIManager::hideCursor();
+        COORD sz = UIManager::getConsoleSize();
+        int logoH = 11;
+        int startRow = (sz.Y - logoH - 12) / 2;
+        if (startRow < 1) startRow = 1;
+        UIManager::drawLogo(startRow);
+        int menuRow = startRow + logoH + 2;
+        UIManager::printCentered(menuRow++, std::string(38, '='), Color::LOGO);
+        UIManager::printCentered(menuRow++, "  Гостевой режим (только просмотр)  ", Color::DIM);
+        UIManager::printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
+        UIManager::printCentered(menuRow++, "  [1]  Просмотр заказов         ", Color::MENU);
+        UIManager::printCentered(menuRow++, "  [2]  Статистика               ", Color::MENU);
+        UIManager::printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
+        UIManager::printCentered(menuRow++, "  [ESC] Назад                   ", Color::DEFAULT);
+
+        int ch = normalizeKey(_getch());
+        if      (ch == KEY_ESC) return;
+        else if (ch == '1') screenViewOrders(om, "");
+        else if (ch == '2') screenStats(om);
+    }
+}
+
+// ============================================================
 // Стартовый экран
 // ============================================================
 void screenStart(UserManager& um, OrderManager& om) {
@@ -503,6 +531,8 @@ void screenStart(UserManager& um, OrderManager& om) {
             if (!login.empty()) screenMainMenu(login, um.getFullName(login), om);
         } else if (ch == '2') {
             screenRegister(um);
+        } else if (ch == '3') {
+            screenGuestMenu(om);
         }
     }
 }
