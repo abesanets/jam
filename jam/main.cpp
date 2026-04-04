@@ -303,6 +303,72 @@ void screenRegister(UserManager& um) {
 }
 
 // ============================================================
+// Экран: Статистика
+// ============================================================
+void screenStats(OrderManager& om) {
+    UIManager::clearScreen();
+    UIManager::hideCursor();
+    UIManager::printCentered(1, "=== Статистика ===", Color::LOGO);
+    UIManager::printHLine(2, 44, '-', Color::DIM);
+
+    std::vector<Order> all = om.getAllOrders();
+
+    int total = (int)all.size();
+    int cntNew = 0, cntWork = 0, cntReady = 0, cntIssued = 0, cntOverdue = 0;
+    double sumTotal = 0.0, sumIssued = 0.0, sumActive = 0.0;
+
+    SYSTEMTIME st; GetLocalTime(&st);
+    int today = st.wYear * 10000 + st.wMonth * 100 + st.wDay;
+    auto dateToInt = [](const std::string& d) -> int {
+        if (d.size() < 10) return 0;
+        try { return std::stoi(d.substr(6,4))*10000 + std::stoi(d.substr(3,2))*100 + std::stoi(d.substr(0,2)); }
+        catch (...) { return 0; }
+    };
+
+    for (const auto& o : all) {
+        sumTotal += o.price;
+        if      (o.status == "Новый")    cntNew++;
+        else if (o.status == "В работе") cntWork++;
+        else if (o.status == "Готов")    cntReady++;
+        else if (o.status == "Выдан")  { cntIssued++; sumIssued += o.price; }
+        if (o.status != "Выдан") sumActive += o.price;
+        int dl = dateToInt(o.deadline);
+        if (dl > 0 && dl < today && o.status != "Выдан") cntOverdue++;
+    }
+
+    auto printStat = [](int row, const std::string& label, const std::string& val, WORD col = Color::DEFAULT) {
+        COORD sz = UIManager::getConsoleSize();
+        int x = (sz.X - 44) / 2; if (x < 0) x = 0;
+        UIManager::setCursor(x, row); UIManager::setColor(Color::TABLE_HDR);
+        std::cout << label;
+        UIManager::setCursor(x + 30, row); UIManager::setColor(col);
+        std::cout << val;
+    };
+
+    int row = 4;
+    printStat(row++, "Всего заказов:                ", std::to_string(total));
+    row++;
+    printStat(row++, "  Новых:                      ", std::to_string(cntNew),    Color::MENU);
+    printStat(row++, "  В работе:                   ", std::to_string(cntWork),   Color::HIGHLIGHT);
+    printStat(row++, "  Готовых:                    ", std::to_string(cntReady),  Color::SUCCESS);
+    printStat(row++, "  Выданных:                   ", std::to_string(cntIssued), Color::DIM);
+    row++;
+    printStat(row++, "  Просроченных:               ", std::to_string(cntOverdue), cntOverdue > 0 ? Color::OVERDUE : Color::DEFAULT);
+    row++;
+
+    std::ostringstream s1, s2, s3;
+    s1 << std::fixed << std::setprecision(2) << sumTotal;
+    s2 << std::fixed << std::setprecision(2) << sumActive;
+    s3 << std::fixed << std::setprecision(2) << sumIssued;
+    printStat(row++, "Сумма всех заказов (руб):     ", s1.str());
+    printStat(row++, "  Активных (руб):             ", s2.str(), Color::MENU);
+    printStat(row++, "  Выданных (руб):             ", s3.str(), Color::DIM);
+
+    UIManager::printHLine(row + 1, 44, '-', Color::DIM);
+    UIManager::waitKey(row + 3);
+}
+
+// ============================================================
 // Главное меню
 // ============================================================
 void screenMainMenu(const std::string& login, OrderManager& om) {
@@ -313,6 +379,7 @@ void screenMainMenu(const std::string& login, OrderManager& om) {
         else if (ch == '1') screenAddOrder(om);
         else if (ch == '2') screenViewOrders(om);
         else if (ch == '3') screenManageOrders(om);
+        else if (ch == '4') screenStats(om);
     }
 }
 

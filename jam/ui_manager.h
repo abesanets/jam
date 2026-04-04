@@ -225,7 +225,7 @@ public:
         printCentered(menuRow++, "  [1]  Добавить заказ           ", Color::MENU);
         printCentered(menuRow++, "  [2]  Просмотр заказов         ", Color::MENU);
         printCentered(menuRow++, "  [3]  Менеджмент заказов       ", Color::MENU);
-        printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
+        printCentered(menuRow++, "  [4]  Статистика               ", Color::MENU);
         printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
         printCentered(menuRow++, "  [ESC] Выйти из аккаунта       ", Color::DEFAULT);
     }
