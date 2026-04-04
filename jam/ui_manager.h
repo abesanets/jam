@@ -13,7 +13,7 @@ namespace Color {
     const WORD DEFAULT   = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
     const WORD LOGO      = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY;
     const WORD MENU      = FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
-    const WORD HIGHLIGHT = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
+    const WORD HIGHLIGHT = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY;
     const WORD ERROR_CLR = FOREGROUND_RED | FOREGROUND_INTENSITY;
     const WORD SUCCESS   = FOREGROUND_GREEN | FOREGROUND_INTENSITY;
     const WORD TABLE_HDR = FOREGROUND_GREEN | FOREGROUND_INTENSITY;
@@ -208,6 +208,166 @@ public:
         printCentered(row++, "  [3]  Войти как гость  ", Color::DIM);
         printCentered(row++, "  [ESC] Выход           ", Color::DEFAULT);
         printCentered(row++, std::string(26, '-'), Color::LOGO);
+    }
+
+    // ============================================================
+    // Нормализует клавишу: UTF-8 кириллица -> латиница (физическая QWERTY).
+    // Читает второй байт сам если нужно. Возвращает -1 для неизвестных.
+    // ============================================================
+    static int normalizeKey(int first) {
+        unsigned char b1 = (unsigned char)first;
+        if (b1 == 0xD0 || b1 == 0xD1) {
+            unsigned char b2 = (unsigned char)_getch();
+            static const struct { unsigned char c1, c2; char lat; } map[] = {
+                {0xD0,0xB9,'q'},{0xD1,0x86,'w'},{0xD1,0x83,'e'},{0xD0,0xBA,'r'},
+                {0xD0,0xB5,'t'},{0xD0,0xBD,'y'},{0xD0,0xB3,'u'},{0xD1,0x88,'i'},
+                {0xD1,0x89,'o'},{0xD0,0xB7,'p'},{0xD1,0x84,'a'},{0xD1,0x8B,'s'},
+                {0xD0,0xB2,'d'},{0xD0,0xB0,'f'},{0xD0,0xBF,'g'},{0xD1,0x80,'h'},
+                {0xD0,0xBE,'j'},{0xD0,0xBB,'k'},{0xD0,0xB4,'l'},{0xD1,0x8F,'z'},
+                {0xD1,0x87,'x'},{0xD1,0x81,'c'},{0xD0,0xBC,'v'},{0xD0,0xB8,'b'},
+                {0xD1,0x82,'n'},{0xD1,0x8C,'m'},
+                // заглавные
+                {0xD0,0x99,'q'},{0xD0,0xA6,'w'},{0xD0,0xA3,'e'},{0xD0,0x9A,'r'},
+                {0xD0,0x95,'t'},{0xD0,0x9D,'y'},{0xD0,0x93,'u'},{0xD0,0xA8,'i'},
+                {0xD0,0xA9,'o'},{0xD0,0x97,'p'},{0xD0,0xA4,'a'},{0xD0,0xAB,'s'},
+                {0xD0,0x92,'d'},{0xD0,0x90,'f'},{0xD0,0x9F,'g'},{0xD0,0xA0,'h'},
+                {0xD0,0x9E,'j'},{0xD0,0x9B,'k'},{0xD0,0x94,'l'},{0xD0,0xAF,'z'},
+                {0xD0,0xA7,'x'},{0xD0,0xA1,'c'},{0xD0,0x9C,'v'},{0xD0,0x98,'b'},
+                {0xD0,0xA2,'n'},{0xD0,0xAC,'m'},
+                {0,0,0}
+            };
+            for (int i = 0; map[i].c1; ++i)
+                if (map[i].c1 == b1 && map[i].c2 == b2) return map[i].lat;
+            return -1;
+        }
+        if (first >= 'A' && first <= 'Z') return first + 32;
+        return first;
+    }
+
+    // ============================================================
+    // Универсальное меню со стрелочной навигацией.
+    // items — список строк пунктов.
+    // startRow — строка с которой рисовать.
+    // Возвращает индекс выбранного пункта или -1 при ESC.
+    // ============================================================
+    static int selectMenu(const std::vector<std::string>& items, int startRow, int initSel = 0) {
+        int sel = initSel;
+        while (true) {
+            for (int i = 0; i < (int)items.size(); ++i) {
+                WORD col = (i == sel) ? Color::HIGHLIGHT : Color::MENU;
+                std::string prefix = (i == sel) ? " > " : "   ";
+                printCentered(startRow + i, prefix + items[i], col);
+            }
+            int k = _getch();
+            if (k == 27) return -1;
+            if (k == 13) return sel;
+            if (k == 0 || k == 224) {
+                int k2 = _getch();
+                if (k2 == 72 && sel > 0) --sel;
+                if (k2 == 80 && sel < (int)items.size() - 1) ++sel;
+            }
+            // цифровые шорткаты
+            if (k >= '1' && k <= '9') {
+                int idx = k - '1';
+                if (idx < (int)items.size()) return idx;
+            }
+        }
+    }
+
+    // ============================================================
+    // Навигация по таблице заказов стрелками.
+    // Рисует таблицу начиная с tableRow, подсвечивает строку sel.
+    // Возвращает: индекс выбранного заказа (Enter), -1 (ESC),
+    //             -2 (доп. клавиша — передаётся через extraKey).
+    // extraKeys — строка символов которые пробрасываются наружу.
+    // ============================================================
+    static int selectFromTable(const std::vector<Order>& orders, int tableRow,
+                               int& sel, const std::string& extraKeys = "") {
+        if (orders.empty()) return -1;
+        if (sel >= (int)orders.size()) sel = 0;
+
+        COORD sz = getConsoleSize();
+        const int C_ID=5,C_NAME=18,C_TEL=14,C_DESC=20,C_PRC=9,C_STS=10,C_DATE=12,C_DL=12,C_MST=16;
+        const int TW=C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL+C_MST;
+        int indent=(sz.X-TW)/2; if(indent<0)indent=0;
+
+        // Заголовок
+        setColor(Color::TABLE_HDR);
+        setCursor(indent,tableRow);                                                    std::cout<<"ID";
+        setCursor(indent+C_ID,tableRow);                                               std::cout<<"ФИО клиента";
+        setCursor(indent+C_ID+C_NAME,tableRow);                                        std::cout<<"Телефон";
+        setCursor(indent+C_ID+C_NAME+C_TEL,tableRow);                                  std::cout<<"Описание";
+        setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC,tableRow);                           std::cout<<"Цена";
+        setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC,tableRow);                     std::cout<<"Статус";
+        setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS,tableRow);              std::cout<<"Приём";
+        setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE,tableRow);       std::cout<<"Дедлайн";
+        setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL,tableRow);  std::cout<<"Мастер";
+        setCursor(indent,tableRow+1); setColor(Color::DIM);
+        std::cout<<std::string(TW,'-');
+
+        if (orders.empty()) {
+            setCursor(indent,tableRow+2); setColor(Color::ERROR_CLR);
+            std::cout<<"  Заказы не найдены.";
+            setColor(Color::DEFAULT);
+            _getch(); return -1;
+        }
+
+        SYSTEMTIME st; GetLocalTime(&st);
+        int today=st.wYear*10000+st.wMonth*100+st.wDay;
+        auto d2i=[](const std::string& d)->int{
+            if(d.size()<10)return 0;
+            try{return std::stoi(d.substr(6,4))*10000+std::stoi(d.substr(3,2))*100+std::stoi(d.substr(0,2));}
+            catch(...){return 0;}
+        };
+
+        // Рисуем строки
+        auto drawRows = [&]() {
+            for(int i=0;i<(int)orders.size();++i){
+                const Order& o=orders[i];
+                std::ostringstream ps; ps<<std::fixed<<std::setprecision(2)<<o.price;
+                bool overdue=(d2i(o.deadline)>0&&d2i(o.deadline)<today&&o.status!="Выдан");
+                WORD rowColor=(i==sel)?Color::HIGHLIGHT:(overdue?Color::OVERDUE:Color::DEFAULT);
+                // стрелка-указатель
+                setCursor(indent-2,tableRow+2+i); setColor(Color::HIGHLIGHT);
+                std::cout<<(i==sel?">": " ");
+                setColor(rowColor);
+                setCursor(indent,tableRow+2+i);                                                   std::cout<<o.id;
+                setCursor(indent+C_ID,tableRow+2+i);                                              std::cout<<trimVisual(o.clientName,C_NAME-1);
+                setCursor(indent+C_ID+C_NAME,tableRow+2+i);                                       std::cout<<trimVisual(o.phone,C_TEL-1);
+                setCursor(indent+C_ID+C_NAME+C_TEL,tableRow+2+i);                                 std::cout<<trimVisual(o.description,C_DESC-1);
+                setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC,tableRow+2+i);                          std::cout<<ps.str();
+                setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC,tableRow+2+i);                    std::cout<<trimVisual(o.status,C_STS-1);
+                setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS,tableRow+2+i);             std::cout<<trimVisual(o.dateReceived,C_DATE-1);
+                setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE,tableRow+2+i);      std::cout<<trimVisual(o.deadline.empty()?"—":o.deadline,C_DL-1);
+                setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL,tableRow+2+i); std::cout<<trimVisual(o.master.empty()?"—":o.master,C_MST-1);
+            }
+            setCursor(indent,tableRow+2+(int)orders.size()); setColor(Color::DIM);
+            std::cout<<std::string(TW,'-');
+            setColor(Color::DEFAULT);
+        };
+
+        drawRows();
+
+        while (true) {
+            int k = _getch();
+            if (k == 27) return -1;
+            if (k == 13) return sel;
+            if (k == 0 || k == 224) {
+                int k2 = _getch();
+                int prev = sel;
+                if (k2 == 72 && sel > 0) --sel;
+                if (k2 == 80 && sel < (int)orders.size()-1) ++sel;
+                if (sel != prev) drawRows();
+                continue;
+            }
+            // проверяем extraKeys — нормализуем через тот же маппинг
+            int nk = normalizeKey(k);
+            if (nk < 0) continue; // неизвестная UTF-8 последовательность
+            char lk = (char)nk;
+            for (char ek : extraKeys) {
+                if (lk == ek) { sel = -(int)(unsigned char)ek; return -2; }
+            }
+        }
     }
 
     // Главное меню — теперь с логотипом сверху
