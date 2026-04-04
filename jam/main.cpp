@@ -53,39 +53,45 @@ void screenAddOrder(OrderManager& om, const std::string& masterName) {
 // ============================================================
 // Экран: Просмотр заказов с фильтрами
 // ============================================================
-void screenViewOrders(OrderManager& om) {
+void screenViewOrders(OrderManager& om, const std::string& masterName) {
     std::string statusFilter = "";
-    int sortMode = 0;    // 0=выкл, 1=ближе сначала, 2=дальше сначала
+    int sortMode = 0;
     bool showIssued = false;
+    bool myOnly = false;
 
     while (true) {
         UIManager::clearScreen();
         UIManager::hideCursor();
         UIManager::printCentered(1, "=== Просмотр заказов ===", Color::LOGO);
 
-        std::string fi = "Статус: ";
+        std::string fi = myOnly ? "Мои  |  " : "Все  |  ";
+        fi += "Статус: ";
         fi += statusFilter.empty() ? "все активные" : statusFilter;
         fi += "  |  Дедлайн: ";
         fi += (sortMode == 0) ? "—" : (sortMode == 1 ? "ближе сначала" : "дальше сначала");
         fi += showIssued ? "  |  [выданные]" : "";
         UIManager::printCentered(2, fi, Color::DIM);
 
-        UIManager::printCentered(3, "[N]овый [W]работе [G]отов [V]ыданные [D]едлайн [R]сброс [ESC]назад", Color::MENU);
+        UIManager::printCentered(3, "[M]ои [N]овый [W]работе [G]отов [V]ыданные [D]едлайн [R]сброс [ESC]назад", Color::MENU);
         UIManager::printHLine(4, 80, '-', Color::DIM);
 
+        auto applyMyFilter = [&](std::vector<Order>& orders) {
+            if (myOnly)
+                orders.erase(std::remove_if(orders.begin(), orders.end(),
+                    [&](const Order& o){ return o.master != masterName; }), orders.end());
+        };
+
         if (showIssued) {
-            // Только выданные
             std::vector<Order> issued = om.getFiltered("Выдан", 0, 0);
+            applyMyFilter(issued);
             UIManager::printCentered(5, "Выданных: " + std::to_string(issued.size()), Color::DIM);
             UIManager::drawOrdersTable(issued, 6);
         } else {
-            // Активные (без выданных), с фильтром и сортировкой
             std::vector<Order> orders = om.getFiltered(statusFilter, 0, sortMode == 0 ? 0 : 1);
-            // Убираем выданных если нет фильтра по статусу
-            if (statusFilter.empty()) {
+            if (statusFilter.empty())
                 orders.erase(std::remove_if(orders.begin(), orders.end(),
                     [](const Order& o){ return o.status == "Выдан"; }), orders.end());
-            }
+            applyMyFilter(orders);
             if (sortMode == 2) std::reverse(orders.begin(), orders.end());
             UIManager::printCentered(5, "Показано: " + std::to_string(orders.size()), Color::MENU);
             UIManager::drawOrdersTable(orders, 6);
@@ -93,9 +99,10 @@ void screenViewOrders(OrderManager& om) {
 
         int ch = _getch();
         if (ch == KEY_ESC) return;
-        if      (ch == 'd' || ch == 'D') { sortMode = (sortMode + 1) % 3; }
+        if      (ch == 'm' || ch == 'M') { myOnly = !myOnly; }
+        else if (ch == 'd' || ch == 'D') { sortMode = (sortMode + 1) % 3; }
         else if (ch == 'v' || ch == 'V') { showIssued = !showIssued; statusFilter = ""; sortMode = 0; }
-        else if (ch == 'r' || ch == 'R') { statusFilter = ""; sortMode = 0; showIssued = false; }
+        else if (ch == 'r' || ch == 'R') { statusFilter = ""; sortMode = 0; showIssued = false; myOnly = false; }
         else if (!showIssued) {
             if      (ch == 'n' || ch == 'N') statusFilter = (statusFilter == "Новый")    ? "" : "Новый";
             else if (ch == 'w' || ch == 'W') statusFilter = (statusFilter == "В работе") ? "" : "В работе";
@@ -199,52 +206,59 @@ void screenManageOrder(OrderManager& om, int id, const std::string& masterName) 
 // ============================================================
 void screenManageOrders(OrderManager& om, const std::string& masterName) {
     bool showIssued = false;
+    bool myOnly = false;
 
     while (true) {
         UIManager::clearScreen();
         UIManager::hideCursor();
         UIManager::printCentered(1, "=== Менеджмент заказов ===", Color::LOGO);
 
-        std::string modeStr = showIssued ? "[V] показать активные" : "[V] показать выданные";
-        UIManager::printCentered(2, modeStr + "  [ESC] назад", Color::MENU);
+        std::string modeStr = myOnly ? "[M]все  " : "[M]ои  ";
+        modeStr += showIssued ? "[V]активные" : "[V]выданные";
+        modeStr += "  [ESC]назад";
+        UIManager::printCentered(2, modeStr, Color::MENU);
         UIManager::printHLine(3, 80, '-', Color::DIM);
 
         std::vector<Order> orders;
         if (showIssued) {
             orders = om.getFiltered("Выдан", 0, 0);
-            UIManager::printCentered(4, "Выданных: " + std::to_string(orders.size()), Color::DIM);
         } else {
             orders = om.getAllOrders();
             orders.erase(std::remove_if(orders.begin(), orders.end(),
                 [](const Order& o){ return o.status == "Выдан"; }), orders.end());
-            UIManager::printCentered(4, "Активных: " + std::to_string(orders.size()), Color::MENU);
         }
+        if (myOnly)
+            orders.erase(std::remove_if(orders.begin(), orders.end(),
+                [&](const Order& o){ return o.master != masterName; }), orders.end());
+
+        WORD countColor = showIssued ? Color::DIM : Color::MENU;
+        std::string countLabel = (showIssued ? "Выданных: " : "Активных: ") + std::to_string(orders.size());
+        if (myOnly) countLabel += "  (мои)";
+        UIManager::printCentered(4, countLabel, countColor);
         UIManager::drawOrdersTable(orders, 5);
 
         int tableBottom = 5 + (int)orders.size() + 2;
         UIManager::printCentered(tableBottom + 1, "  Введите ID заказа:", Color::MENU);
 
-        // Читаем первый символ как команду или начало ID
         UIManager::showCursor();
         int first = _getch();
         UIManager::hideCursor();
 
         if (first == KEY_ESC) return;
         if (first == 'v' || first == 'V') { showIssued = !showIssued; continue; }
+        if (first == 'm' || first == 'M') { myOnly = !myOnly; continue; }
         if (first < '0' || first > '9') continue;
 
-        // Собираем остаток числа
         std::string idStr(1, (char)first);
         UIManager::setCursor((UIManager::getConsoleSize().X - 20) / 2 + 20, tableBottom + 1);
         UIManager::setColor(Color::DEFAULT);
         std::cout << idStr;
         while (true) {
             int ch = _getch();
-            if (ch == 13) break; // Enter
+            if (ch == 13) break;
             if (ch == KEY_ESC) { idStr = ""; break; }
             if (ch == 8 && !idStr.empty()) { idStr.pop_back(); }
             else if (ch >= '0' && ch <= '9') idStr += (char)ch;
-            // перерисовываем поле
             UIManager::setCursor((UIManager::getConsoleSize().X - 20) / 2 + 20, tableBottom + 1);
             UIManager::setColor(Color::DEFAULT);
             std::cout << idStr << "  ";
@@ -381,7 +395,7 @@ void screenMainMenu(const std::string& login, const std::string& masterName, Ord
         int ch = _getch();
         if      (ch == KEY_ESC) return;
         else if (ch == '1') screenAddOrder(om, masterName);
-        else if (ch == '2') screenViewOrders(om);
+        else if (ch == '2') screenViewOrders(om, masterName);
         else if (ch == '3') screenManageOrders(om, masterName);
         else if (ch == '4') screenStats(om);
     }
