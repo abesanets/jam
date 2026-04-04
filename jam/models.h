@@ -8,6 +8,7 @@
 struct User {
     std::string login;
     std::string password;
+    std::string fullName;
 };
 
 struct Order {
@@ -19,6 +20,7 @@ struct Order {
     std::string status;
     std::string dateReceived; // дата приёма (авто, формат DD.MM.YYYY)
     std::string deadline;     // дедлайн (вводится вручную, формат DD.MM.YYYY)
+    std::string master;       // ФИО мастера (из аккаунта)
 };
 
 const std::string ORDER_STATUSES[] = {

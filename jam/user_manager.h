@@ -19,7 +19,7 @@ private:
     std::vector<User> users;
 
     // Загружает пользователей из файла в память.
-    // Формат: login|password (по одной записи на строку)
+    // Формат: login|password|fullName (по одной записи на строку)
     void loadFromFile() {
         users.clear();
         std::ifstream file(USERS_FILE);
@@ -31,6 +31,7 @@ private:
             User u;
             std::getline(ss, u.login,    '|');
             std::getline(ss, u.password, '|');
+            std::getline(ss, u.fullName, '|');
             if (!u.login.empty()) users.push_back(u);
         }
         file.close();
@@ -40,7 +41,7 @@ private:
     void saveToFile() const {
         std::ofstream file(USERS_FILE, std::ios::trunc);
         for (const auto& u : users)
-            file << u.login << "|" << u.password << "\n";
+            file << u.login << "|" << u.password << "|" << u.fullName << "\n";
         file.close();
     }
 
@@ -50,11 +51,11 @@ public:
 
     // Регистрирует нового пользователя.
     // Возвращает false если логин занят или поля пустые.
-    bool registerUser(const std::string& login, const std::string& password) {
-        if (login.empty() || password.empty()) return false;
+    bool registerUser(const std::string& login, const std::string& password, const std::string& fullName) {
+        if (login.empty() || password.empty() || fullName.empty()) return false;
         for (const auto& u : users)
             if (u.login == login) return false;
-        users.push_back({login, password});
+        users.push_back({login, password, fullName});
         saveToFile();
         return true;
     }
@@ -65,5 +66,12 @@ public:
         for (const auto& u : users)
             if (u.login == login && u.password == password) return true;
         return false;
+    }
+
+    // Возвращает ФИО по логину
+    std::string getFullName(const std::string& login) const {
+        for (const auto& u : users)
+            if (u.login == login) return u.fullName;
+        return login;
     }
 };

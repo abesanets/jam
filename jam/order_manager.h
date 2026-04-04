@@ -2,7 +2,7 @@
 
 // ============================================================
 // order_manager.h — CRUD-операции с заказами, хранение в orders.txt
-// Формат: id|clientName|phone|description|price|status|dateReceived|deadline
+// Формат: id|clientName|phone|description|price|status|dateReceived|deadline|master
 // ============================================================
 
 #include <string>
@@ -47,6 +47,7 @@ private:
             std::getline(ss, o.status,      '|');
             std::getline(ss, o.dateReceived,'|');
             std::getline(ss, o.deadline,    '|');
+            std::getline(ss, o.master,      '|');
             try {
                 o.id    = std::stoi(idStr);
                 o.price = std::stod(priceStr);
@@ -62,7 +63,7 @@ private:
         for (const auto& o : orders)
             file << o.id << "|" << o.clientName << "|" << o.phone << "|"
                  << o.description << "|" << o.price << "|" << o.status << "|"
-                 << o.dateReceived << "|" << o.deadline << "\n";
+                 << o.dateReceived << "|" << o.deadline << "|" << o.master << "\n";
         file.close();
     }
 
@@ -71,7 +72,7 @@ public:
 
     int addOrder(const std::string& clientName, const std::string& phone,
                  const std::string& description, double price,
-                 const std::string& deadline) {
+                 const std::string& deadline, const std::string& master) {
         Order o;
         o.id           = nextId++;
         o.clientName   = clientName;
@@ -81,6 +82,7 @@ public:
         o.status       = "Новый";
         o.dateReceived = getCurrentDate();
         o.deadline     = deadline;
+        o.master       = master;
         orders.push_back(o);
         saveToFile();
         return o.id;

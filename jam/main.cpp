@@ -22,7 +22,7 @@ const int KEY_ESC = 27;
 // ============================================================
 // Экран: Добавление нового заказа
 // ============================================================
-void screenAddOrder(OrderManager& om) {
+void screenAddOrder(OrderManager& om, const std::string& masterName) {
     UIManager::clearScreen();
     UIManager::hideCursor();
     UIManager::printCentered(1, "=== Добавление нового заказа ===", Color::LOGO);
@@ -45,7 +45,7 @@ void screenAddOrder(OrderManager& om) {
     double price = 0.0;
     try { price = std::stod(priceStr); } catch (...) {}
 
-    int newId = om.addOrder(clientName, phone, description, price, deadline);
+    int newId = om.addOrder(clientName, phone, description, price, deadline, masterName);
     UIManager::printSuccess(16, "Заказ добавлен! ID: " + std::to_string(newId));
     UIManager::waitKey(18);
 }
@@ -107,7 +107,7 @@ void screenViewOrders(OrderManager& om) {
 // ============================================================
 // Экран: Подменю конкретного заказа
 // ============================================================
-void screenManageOrder(OrderManager& om, int id) {
+void screenManageOrder(OrderManager& om, int id, const std::string& masterName) {
     while (true) {
         Order* o = om.findById(id);
         if (!o) return;
@@ -116,17 +116,24 @@ void screenManageOrder(OrderManager& om, int id) {
         UIManager::hideCursor();
         UIManager::drawOrderDetail(*o, 1);
 
+        bool isOwner = (o->master == masterName);
         int menuRow = 15;
         UIManager::printHLine(menuRow++, 46, '-', Color::DIM);
-        UIManager::printCentered(menuRow++, "  [1] Изменить статус  ", Color::MENU);
-        UIManager::printCentered(menuRow++, "  [2] Редактировать    ", Color::MENU);
-        UIManager::printCentered(menuRow++, "  [3] Удалить заказ    ", Color::OVERDUE);
+        if (isOwner) {
+            UIManager::printCentered(menuRow++, "  [1] Изменить статус  ", Color::MENU);
+            UIManager::printCentered(menuRow++, "  [2] Редактировать    ", Color::MENU);
+            UIManager::printCentered(menuRow++, "  [3] Удалить заказ    ", Color::OVERDUE);
+        } else {
+            UIManager::printCentered(menuRow++, "  Только просмотр      ", Color::DIM);
+            UIManager::printCentered(menuRow++, "  (чужой заказ)        ", Color::DIM);
+            menuRow++;
+        }
         UIManager::printCentered(menuRow++, "  [ESC] Назад          ", Color::DEFAULT);
 
         int ch = _getch();
         if (ch == KEY_ESC) return;
 
-        if (ch == '1') {
+        if (isOwner && ch == '1') {
             UIManager::clearScreen();
             UIManager::printCentered(1, "=== Изменение статуса ===", Color::LOGO);
             UIManager::printCentered(2, "Заказ #" + std::to_string(o->id) + " — " + o->clientName, Color::DEFAULT);
@@ -146,7 +153,7 @@ void screenManageOrder(OrderManager& om, int id) {
                     break;
                 }
             }
-        } else if (ch == '2') {
+        } else if (isOwner && ch == '2') {
             UIManager::clearScreen();
             UIManager::hideCursor();
             UIManager::printCentered(1, "=== Редактирование заказа #" + std::to_string(o->id) + " ===", Color::LOGO);
@@ -172,7 +179,7 @@ void screenManageOrder(OrderManager& om, int id) {
                 deadline.empty()    ? o->deadline    : deadline);
             UIManager::printSuccess(15, "Заказ обновлён!");
             UIManager::waitKey(17);
-        } else if (ch == '3') {
+        } else if (isOwner && ch == '3') {
             UIManager::clearScreen();
             UIManager::printCentered(3, "Удалить заказ #" + std::to_string(o->id) + " — " + o->clientName + "?", Color::OVERDUE);
             UIManager::printCentered(5, "  [Y] Да, удалить   [N / ESC] Отмена  ", Color::MENU);
@@ -190,7 +197,7 @@ void screenManageOrder(OrderManager& om, int id) {
 // ============================================================
 // Экран: Менеджмент заказов — список + ввод ID
 // ============================================================
-void screenManageOrders(OrderManager& om) {
+void screenManageOrders(OrderManager& om, const std::string& masterName) {
     bool showIssued = false;
 
     while (true) {
@@ -251,7 +258,7 @@ void screenManageOrders(OrderManager& om) {
             UIManager::waitKey(tableBottom + 5);
             continue;
         }
-        screenManageOrder(om, id);
+        screenManageOrder(om, id, masterName);
     }
 }
 
@@ -275,31 +282,6 @@ std::string screenLogin(UserManager& um) {
     UIManager::printError(9, "Неверный логин или пароль!");
     UIManager::waitKey(11);
     return "";
-}
-
-// ============================================================
-// Экран: Регистрация
-// ============================================================
-void screenRegister(UserManager& um) {
-    UIManager::clearScreen();
-    UIManager::hideCursor();
-    UIManager::printCentered(1, "=== Регистрация ===", Color::LOGO);
-    UIManager::printHLine(2, 30, '-', Color::DIM);
-    UIManager::printCentered(3, "[ESC] на любом поле — назад", Color::DIM);
-    std::string login, password, confirm;
-    if (!UIManager::inputStringESC(5, "  Придумайте логин:  ", login))    return;
-    if (!UIManager::inputStringESC(7, "  Придумайте пароль: ", password)) return;
-    if (!UIManager::inputStringESC(9, "  Повторите пароль:  ", confirm))  return;
-    if (password != confirm) {
-        UIManager::printError(11, "Пароли не совпадают!");
-        UIManager::waitKey(13);
-        return;
-    }
-    if (um.registerUser(login, password))
-        UIManager::printSuccess(11, "Регистрация прошла успешно! Войдите в систему.");
-    else
-        UIManager::printError(11, "Логин уже занят или поля пустые!");
-    UIManager::waitKey(13);
 }
 
 // ============================================================
@@ -369,16 +351,38 @@ void screenStats(OrderManager& om) {
 }
 
 // ============================================================
-// Главное меню
+// Экран: Регистрация
 // ============================================================
-void screenMainMenu(const std::string& login, OrderManager& om) {
+void screenRegister(UserManager& um) {
+    UIManager::clearScreen();
+    UIManager::hideCursor();
+    UIManager::printCentered(1, "=== Регистрация ===", Color::LOGO);
+    UIManager::printHLine(2, 30, '-', Color::DIM);
+    UIManager::printCentered(3, "[ESC] на любом поле — назад", Color::DIM);
+    std::string fullName, login, password, confirm;
+    if (!UIManager::inputStringESC(5, "  Ваше ФИО:          ", fullName))  return;
+    if (!UIManager::inputStringESC(7, "  Придумайте логин:  ", login))     return;
+    if (!UIManager::inputStringESC(9, "  Придумайте пароль: ", password))  return;
+    if (!UIManager::inputStringESC(11,"  Повторите пароль:  ", confirm))   return;
+    if (password != confirm) {
+        UIManager::printError(13, "Пароли не совпадают!");
+        UIManager::waitKey(15);
+        return;
+    }
+    if (um.registerUser(login, password, fullName))
+        UIManager::printSuccess(13, "Регистрация прошла успешно! Войдите в систему.");
+    else
+        UIManager::printError(13, "Логин уже занят или поля пустые!");
+    UIManager::waitKey(15);
+}
+void screenMainMenu(const std::string& login, const std::string& masterName, OrderManager& om) {
     while (true) {
-        UIManager::drawMainMenuFull(login);
+        UIManager::drawMainMenuFull(masterName);
         int ch = _getch();
         if      (ch == KEY_ESC) return;
-        else if (ch == '1') screenAddOrder(om);
+        else if (ch == '1') screenAddOrder(om, masterName);
         else if (ch == '2') screenViewOrders(om);
-        else if (ch == '3') screenManageOrders(om);
+        else if (ch == '3') screenManageOrders(om, masterName);
         else if (ch == '4') screenStats(om);
     }
 }
@@ -405,7 +409,7 @@ void screenStart(UserManager& um, OrderManager& om) {
             return;
         } else if (ch == '1') {
             std::string login = screenLogin(um);
-            if (!login.empty()) screenMainMenu(login, om);
+            if (!login.empty()) screenMainMenu(login, um.getFullName(login), om);
         } else if (ch == '2') {
             screenRegister(um);
         }

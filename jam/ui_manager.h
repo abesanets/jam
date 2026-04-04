@@ -258,6 +258,7 @@ public:
         printField("Цена (руб):      ", ps.str());
         printField("Статус:          ", o.status, Color::HIGHLIGHT);
         printField("Дата приёма:     ", o.dateReceived.empty() ? "—" : o.dateReceived);
+        printField("Мастер:          ", o.master.empty() ? "—" : o.master, Color::HIGHLIGHT);
         {
             SYSTEMTIME st; GetLocalTime(&st);
             int today = st.wYear * 10000 + st.wMonth * 100 + st.wDay;
@@ -282,12 +283,12 @@ public:
     static int drawOrdersTable(const std::vector<Order>& orders, int startRow) {
         COORD sz = getConsoleSize();
         // Колонки: ID | ФИО | Телефон | Описание | Цена | Статус | Приём | Дедлайн
-        const int C_ID=5, C_NAME=18, C_TEL=14, C_DESC=20, C_PRC=9, C_STS=10, C_DATE=12, C_DL=12;
-        const int TW = C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL;
+        const int C_ID=5, C_NAME=18, C_TEL=14, C_DESC=20, C_PRC=9, C_STS=10, C_DATE=12, C_DL=12, C_MST=16;
+        const int TW = C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL+C_MST;
         int indent = (sz.X - TW) / 2; if (indent < 0) indent = 0;
         int xID=indent, xNAME=xID+C_ID, xTEL=xNAME+C_NAME;
         int xDESC=xTEL+C_TEL, xPRC=xDESC+C_DESC, xSTS=xPRC+C_PRC;
-        int xDATE=xSTS+C_STS, xDL=xDATE+C_DATE;
+        int xDATE=xSTS+C_STS, xDL=xDATE+C_DATE, xMST=xDL+C_DL;
         int row = startRow;
 
         // Заголовок
@@ -300,6 +301,7 @@ public:
         setCursor(xSTS,  row); std::cout << "Статус";
         setCursor(xDATE, row); std::cout << "Приём";
         setCursor(xDL,   row); std::cout << "Дедлайн";
+        setCursor(xMST,  row); std::cout << "Мастер";
         row++;
         setCursor(indent, row++); setColor(Color::DIM);
         std::cout << std::string(TW, '-');
@@ -334,6 +336,7 @@ public:
             setCursor(xSTS,  row); std::cout << trimVisual(o.status,      C_STS-1);
             setCursor(xDATE, row); std::cout << trimVisual(o.dateReceived, C_DATE-1);
             setCursor(xDL,   row); std::cout << trimVisual(o.deadline.empty() ? "—" : o.deadline, C_DL-1);
+            setCursor(xMST,  row); std::cout << trimVisual(o.master.empty() ? "—" : o.master, C_MST-1);
             row++;
         }
         setCursor(indent, row); setColor(Color::DIM);
