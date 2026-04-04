@@ -252,24 +252,26 @@ public:
     // ============================================================
     static int selectMenu(const std::vector<std::string>& items, int startRow, int initSel = 0) {
         int sel = initSel;
+        int n = (int)items.size();
         while (true) {
-            for (int i = 0; i < (int)items.size(); ++i) {
+            for (int i = 0; i < n; ++i) {
                 WORD col = (i == sel) ? Color::HIGHLIGHT : Color::MENU;
                 std::string prefix = (i == sel) ? " > " : "   ";
-                printCentered(startRow + i, prefix + items[i], col);
+                std::string num = "[" + std::to_string(i + 1) + "] ";
+                printCentered(startRow + i, prefix + num + items[i], col);
             }
             int k = _getch();
             if (k == 27) return -1;
             if (k == 13) return sel;
             if (k == 0 || k == 224) {
                 int k2 = _getch();
-                if (k2 == 72 && sel > 0) --sel;
-                if (k2 == 80 && sel < (int)items.size() - 1) ++sel;
+                if (k2 == 72) sel = (sel - 1 + n) % n;
+                if (k2 == 80) sel = (sel + 1) % n;
             }
             // цифровые шорткаты
             if (k >= '1' && k <= '9') {
                 int idx = k - '1';
-                if (idx < (int)items.size()) return idx;
+                if (idx < n) return idx;
             }
         }
     }
@@ -355,8 +357,8 @@ public:
             if (k == 0 || k == 224) {
                 int k2 = _getch();
                 int prev = sel;
-                if (k2 == 72 && sel > 0) --sel;
-                if (k2 == 80 && sel < (int)orders.size()-1) ++sel;
+                if (k2 == 72) sel = (sel - 1 + (int)orders.size()) % (int)orders.size();
+                if (k2 == 80) sel = (sel + 1) % (int)orders.size();
                 if (sel != prev) drawRows();
                 continue;
             }
