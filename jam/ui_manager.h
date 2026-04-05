@@ -32,6 +32,18 @@ public:
         }
         return size;
     }
+    // Возвращает строку для вертикального центрирования блока высотой h
+    static int vCenter(int h) {
+        COORD sz = getConsoleSize();
+        int row = (sz.Y - h) / 2;
+        return row < 1 ? 1 : row;
+    }
+    // Проверяет изменился ли размер консоли с момента последнего вызова
+    static bool sizeChanged(COORD& prev) {
+        COORD cur = getConsoleSize();
+        if (cur.X != prev.X || cur.Y != prev.Y) { prev = cur; return true; }
+        return false;
+    }
     static void setCursor(int x, int y) {
         COORD pos = {(SHORT)x, (SHORT)y};
         SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
@@ -253,12 +265,18 @@ public:
     static int selectMenu(const std::vector<std::string>& items, int startRow, int initSel = 0) {
         int sel = initSel;
         int n = (int)items.size();
+        COORD prevSz = getConsoleSize();
         while (true) {
             for (int i = 0; i < n; ++i) {
                 WORD col = (i == sel) ? Color::HIGHLIGHT : Color::MENU;
                 std::string prefix = (i == sel) ? " > " : "   ";
                 std::string num = "[" + std::to_string(i + 1) + "] ";
                 printCentered(startRow + i, prefix + num + items[i], col);
+            }
+            // неблокирующая проверка ресайза через kbhit
+            while (!_kbhit()) {
+                if (sizeChanged(prevSz)) return -2; // сигнал перерисовки
+                Sleep(50);
             }
             int k = _getch();
             if (k == 27) return -1;
@@ -350,7 +368,13 @@ public:
 
         drawRows();
 
+        COORD prevSz = getConsoleSize();
         while (true) {
+            // неблокирующая проверка ресайза
+            while (!_kbhit()) {
+                if (sizeChanged(prevSz)) return -3; // сигнал ресайза
+                Sleep(50);
+            }
             int k = _getch();
             if (k == 27) return -1;
             if (k == 13) return sel;
