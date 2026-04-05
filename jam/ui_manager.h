@@ -1,6 +1,6 @@
 #pragma once
 #include <windows.h>
-#include <conio.h>
+#include <conio.h> // нужен для _getch в inputStringESC
 #include <iostream>
 #include <string>
 #include <vector>
@@ -15,8 +15,8 @@ namespace Color {
     const WORD MENU      = FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
     const WORD HIGHLIGHT = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY;
     const WORD ERROR_CLR = FOREGROUND_RED | FOREGROUND_INTENSITY;
-    const WORD SUCCESS   = FOREGROUND_GREEN | FOREGROUND_INTENSITY;
-    const WORD TABLE_HDR = FOREGROUND_GREEN | FOREGROUND_INTENSITY;
+    const WORD TABLE_HDR        = FOREGROUND_GREEN | FOREGROUND_BLUE | FOREGROUND_INTENSITY;
+    const WORD TABLE_HDR_FILTER = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY;
     const WORD DIM       = FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_BLUE;
     const WORD OVERDUE   = FOREGROUND_RED | FOREGROUND_INTENSITY;
 }
@@ -102,19 +102,6 @@ public:
     static void waitKey(int row) {
         printCentered(row, "  Нажмите любую клавишу...  ", Color::DIM);
         readKey();
-    }
-    static std::string inputString(int row, const std::string& label) {
-        showCursor();
-        COORD sz = getConsoleSize();
-        int col = (sz.X - 40) / 2;
-        if (col < 0) col = 0;
-        setCursor(col, row); setColor(Color::HIGHLIGHT);
-        std::cout << label;
-        setCursor(col + visualWidth(label), row); setColor(Color::DEFAULT);
-        std::string result;
-        std::getline(std::cin, result);
-        hideCursor();
-        return result;
     }
     static bool inputStringESC(int row, const std::string& label, std::string& result) {
         showCursor();
@@ -208,18 +195,6 @@ public:
         }
         row++;
         setCursor(indent, row); setColor(Color::LOGO);
-    }
-
-    static void drawStartMenu(int startRow) {
-        int row = startRow;
-        printCentered(row++, std::string(26, '='), Color::LOGO);
-        printCentered(row++, "  Выберите действие:    ", Color::MENU);
-        printCentered(row++, std::string(26, '-'), Color::LOGO);
-        printCentered(row++, "  [1]  Вход в систему   ", Color::MENU);
-        printCentered(row++, "  [2]  Регистрация      ", Color::MENU);
-        printCentered(row++, "  [3]  Войти как гость  ", Color::DIM);
-        printCentered(row++, "  [ESC] Выход           ", Color::DEFAULT);
-        printCentered(row++, std::string(26, '-'), Color::LOGO);
     }
 
     // ============================================================
@@ -333,7 +308,7 @@ public:
         int indent=(sz.X-TW)/2; if(indent<0)indent=0;
 
         // Заголовок
-        setColor(Color::TABLE_HDR);
+        setColor(Color::TABLE_HDR_FILTER);
         setCursor(indent,tableRow);                                                    std::cout<<"ID";
         setCursor(indent+C_ID,tableRow);                                               std::cout<<"ФИО клиента";
         setCursor(indent+C_ID+C_NAME,tableRow);                                        std::cout<<"Телефон";
@@ -345,14 +320,6 @@ public:
         setCursor(indent+C_ID+C_NAME+C_TEL+C_DESC+C_PRC+C_STS+C_DATE+C_DL,tableRow);  std::cout<<"Мастер";
         setCursor(indent,tableRow+1); setColor(Color::DIM);
         std::cout<<std::string(TW,'-');
-
-        if (orders.empty()) {
-            setCursor(indent,tableRow+2); setColor(Color::ERROR_CLR);
-            std::cout<<"  Заказы не найдены.";
-            setColor(Color::DEFAULT);
-            readKey();
-            return -1;
-        }
 
         SYSTEMTIME st; GetLocalTime(&st);
         int today=st.wYear*10000+st.wMonth*100+st.wDay;
@@ -417,28 +384,6 @@ public:
         }
     }
 
-    // Главное меню — теперь с логотипом сверху
-    static void drawMainMenuFull(const std::string& login) {
-        clearScreen();
-        hideCursor();
-        COORD sz = getConsoleSize();
-        int logoHeight = 11; // строк занимает drawLogo
-        int startRow = (sz.Y - logoHeight - 12) / 2;
-        if (startRow < 1) startRow = 1;
-        drawLogo(startRow);
-        int menuRow = startRow + logoHeight + 2;
-        printCentered(menuRow++, std::string(38, '='), Color::LOGO);
-        printCentered(menuRow++, "  Добро пожаловать, " + login + "!  ", Color::MENU);
-        printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
-        printCentered(menuRow++, "  [1]  Добавить заказ           ", Color::MENU);
-        printCentered(menuRow++, "  [2]  Просмотр заказов         ", Color::MENU);
-        printCentered(menuRow++, "  [3]  Менеджмент заказов       ", Color::MENU);
-        printCentered(menuRow++, "  [4]  Статистика               ", Color::MENU);
-        printCentered(menuRow++, "  [5]  Поиск                    ", Color::MENU);
-        printCentered(menuRow++, std::string(38, '-'), Color::LOGO);
-        printCentered(menuRow++, "  [ESC] Выйти из аккаунта       ", Color::DEFAULT);
-    }
-
     // Детальный просмотр одного заказа
     static void drawOrderDetail(const Order& o, int startRow) {
         COORD sz = getConsoleSize();
@@ -501,7 +446,7 @@ public:
         int row = startRow;
 
         // Заголовок
-        setColor(Color::TABLE_HDR);
+        setColor(Color::TABLE_HDR_FILTER);
         setCursor(xID,   row); std::cout << "ID";
         setCursor(xNAME, row); std::cout << "ФИО клиента";
         setCursor(xTEL,  row); std::cout << "Телефон";

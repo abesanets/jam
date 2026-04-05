@@ -7,7 +7,6 @@
 // ============================================================
 
 #include <windows.h>
-#include <conio.h>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -16,8 +15,6 @@
 #include "ui_manager.h"
 #include "user_manager.h"
 #include "order_manager.h"
-
-const int KEY_ESC = 27;
 
 // forward declaration
 void screenManageOrder(OrderManager& om, int id, const std::string& masterName);
@@ -106,7 +103,7 @@ void screenOrders(OrderManager& om, const std::string& masterName) {
             UIManager::drawOrdersTable(orders, 6);
             UIManager::KeyEvent ke = UIManager::readKey();
             int k = UIManager::normalizeKey(ke.vk);
-            if (k == KEY_ESC || ke.vk == VK_ESCAPE) return;
+            if (ke.vk == VK_ESCAPE) return;
             if (k == 'm') myOnly = !myOnly;
             else if (k == 'v') { showIssued = !showIssued; statusFilter = ""; sortMode = 0; }
             else if (k == 'r') { statusFilter = ""; sortMode = 0; showIssued = false; myOnly = false; }
@@ -288,33 +285,34 @@ void screenStats(OrderManager& om) {
         if (dl > 0 && dl < today && o.status != "Выдан") cntOverdue++;
     }
 
-    auto printStat = [](int row, const std::string& label, const std::string& val, WORD col = Color::DEFAULT) {
+    auto printStat = [](int row, const std::string& label, const std::string& val, WORD col = Color::DEFAULT, WORD labelCol = Color::MENU) {
         COORD sz = UIManager::getConsoleSize();
         int x = (sz.X - 44) / 2; if (x < 0) x = 0;
-        UIManager::setCursor(x, row); UIManager::setColor(Color::TABLE_HDR);
+        UIManager::setCursor(x, row); UIManager::setColor(labelCol);
         std::cout << label;
         UIManager::setCursor(x + 30, row); UIManager::setColor(col);
         std::cout << val;
+        UIManager::setColor(Color::DEFAULT);
     };
 
     int row = r + 3;
-    printStat(row++, "Всего заказов:                ", std::to_string(total));
+    printStat(row++, "Всего заказов:                ", std::to_string(total),     Color::LOGO,    Color::LOGO);
     row++;
-    printStat(row++, "  Новых:                      ", std::to_string(cntNew),    Color::MENU);
-    printStat(row++, "  В работе:                   ", std::to_string(cntWork),   Color::HIGHLIGHT);
-    printStat(row++, "  Готовых:                    ", std::to_string(cntReady),  Color::SUCCESS);
-    printStat(row++, "  Выданных:                   ", std::to_string(cntIssued), Color::DIM);
+    printStat(row++, "  Новых:                      ", std::to_string(cntNew),    Color::MENU,    Color::MENU);
+    printStat(row++, "  В работе:                   ", std::to_string(cntWork),   Color::HIGHLIGHT, Color::MENU);
+    printStat(row++, "  Готовых:                    ", std::to_string(cntReady),  Color::MENU,    Color::MENU);
+    printStat(row++, "  Выданных:                   ", std::to_string(cntIssued), Color::DIM,     Color::MENU);
     row++;
-    printStat(row++, "  Просроченных:               ", std::to_string(cntOverdue), cntOverdue > 0 ? Color::OVERDUE : Color::DEFAULT);
+    printStat(row++, "  Просроченных:               ", std::to_string(cntOverdue), cntOverdue > 0 ? Color::OVERDUE : Color::DIM, Color::MENU);
     row++;
 
     std::ostringstream s1, s2, s3;
     s1 << std::fixed << std::setprecision(2) << sumTotal;
     s2 << std::fixed << std::setprecision(2) << sumActive;
     s3 << std::fixed << std::setprecision(2) << sumIssued;
-    printStat(row++, "Сумма всех заказов (руб):     ", s1.str());
-    printStat(row++, "  Активных (руб):             ", s2.str(), Color::MENU);
-    printStat(row++, "  Выданных (руб):             ", s3.str(), Color::DIM);
+    printStat(row++, "Сумма всех заказов (руб):     ", s1.str(),  Color::LOGO,  Color::LOGO);
+    printStat(row++, "  Активных (руб):             ", s2.str(),  Color::MENU,  Color::MENU);
+    printStat(row++, "  Выданных (руб):             ", s3.str(),  Color::DIM,   Color::MENU);
 
     UIManager::printHLine(row + 1, 44, '-', Color::DIM);
     UIManager::waitKey(row + 3);
