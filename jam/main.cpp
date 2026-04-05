@@ -104,8 +104,9 @@ void screenOrders(OrderManager& om, const std::string& masterName) {
 
         if (orders.empty()) {
             UIManager::drawOrdersTable(orders, 6);
-            int k = UIManager::normalizeKey(_getch());
-            if (k == KEY_ESC) return;
+            UIManager::KeyEvent ke = UIManager::readKey();
+            int k = UIManager::normalizeKey(ke.vk);
+            if (k == KEY_ESC || ke.vk == VK_ESCAPE) return;
             if (k == 'm') myOnly = !myOnly;
             else if (k == 'v') { showIssued = !showIssued; statusFilter = ""; sortMode = 0; }
             else if (k == 'r') { statusFilter = ""; sortMode = 0; showIssued = false; myOnly = false; }
@@ -221,7 +222,7 @@ void screenManageOrder(OrderManager& om, int id, const std::string& masterName) 
             UIManager::printCentered(menuRow,   "  Только просмотр  ", Color::DIM);
             UIManager::printCentered(menuRow+1, "  (чужой заказ)    ", Color::DIM);
             UIManager::printCentered(menuRow+3, "  [ESC] Назад      ", Color::DEFAULT);
-            _getch();
+            UIManager::readKey();
             return;
         }
     }
@@ -417,14 +418,11 @@ void screenSearch(OrderManager& om, const std::string& masterName) {
                     WORD col = (i == sel) ? Color::HIGHLIGHT : Color::DEFAULT;
                     UIManager::printCentered(mr+4 + i, (i == sel ? " > " : "   ") + masters[i], col);
                 }
-                int k = _getch();
-                if (k == KEY_ESC) break;
-                if (k == 13) { picked = true; break; }
-                if (k == 0 || k == 224) {
-                    int k2 = _getch();
-                    if (k2 == 72 && sel > 0) --sel;
-                    if (k2 == 80 && sel < (int)masters.size()-1) ++sel;
-                }
+                UIManager::KeyEvent ke = UIManager::readKey();
+                if (ke.vk == VK_ESCAPE) break;
+                if (ke.vk == VK_RETURN) { picked = true; break; }
+                if (ke.vk == VK_UP   && sel > 0) --sel;
+                if (ke.vk == VK_DOWN && sel < (int)masters.size()-1) ++sel;
             }
             if (!picked) continue;
             for (const auto& o : om.getAllOrders())

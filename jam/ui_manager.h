@@ -101,7 +101,7 @@ public:
     }
     static void waitKey(int row) {
         printCentered(row, "  Нажмите любую клавишу...  ", Color::DIM);
-        _getch();
+        readKey();
     }
     static std::string inputString(int row, const std::string& label) {
         showCursor();
@@ -223,37 +223,60 @@ public:
     }
 
     // ============================================================
-    // Нормализует клавишу: UTF-8 кириллица -> латиница (физическая QWERTY).
-    // Читает второй байт сам если нужно. Возвращает -1 для неизвестных.
+    // Читает одно нажатие клавиши через ReadConsoleInput.
+    // Возвращает структуру с VirtualKeyCode и UnicodeChar.
+    // Пропускает события отпускания клавиши и не-клавиатурные события.
     // ============================================================
-    static int normalizeKey(int first) {
-        unsigned char b1 = (unsigned char)first;
-        if (b1 == 0xD0 || b1 == 0xD1) {
-            unsigned char b2 = (unsigned char)_getch();
-            static const struct { unsigned char c1, c2; char lat; } map[] = {
-                {0xD0,0xB9,'q'},{0xD1,0x86,'w'},{0xD1,0x83,'e'},{0xD0,0xBA,'r'},
-                {0xD0,0xB5,'t'},{0xD0,0xBD,'y'},{0xD0,0xB3,'u'},{0xD1,0x88,'i'},
-                {0xD1,0x89,'o'},{0xD0,0xB7,'p'},{0xD1,0x84,'a'},{0xD1,0x8B,'s'},
-                {0xD0,0xB2,'d'},{0xD0,0xB0,'f'},{0xD0,0xBF,'g'},{0xD1,0x80,'h'},
-                {0xD0,0xBE,'j'},{0xD0,0xBB,'k'},{0xD0,0xB4,'l'},{0xD1,0x8F,'z'},
-                {0xD1,0x87,'x'},{0xD1,0x81,'c'},{0xD0,0xBC,'v'},{0xD0,0xB8,'b'},
-                {0xD1,0x82,'n'},{0xD1,0x8C,'m'},
-                // заглавные
-                {0xD0,0x99,'q'},{0xD0,0xA6,'w'},{0xD0,0xA3,'e'},{0xD0,0x9A,'r'},
-                {0xD0,0x95,'t'},{0xD0,0x9D,'y'},{0xD0,0x93,'u'},{0xD0,0xA8,'i'},
-                {0xD0,0xA9,'o'},{0xD0,0x97,'p'},{0xD0,0xA4,'a'},{0xD0,0xAB,'s'},
-                {0xD0,0x92,'d'},{0xD0,0x90,'f'},{0xD0,0x9F,'g'},{0xD0,0xA0,'h'},
-                {0xD0,0x9E,'j'},{0xD0,0x9B,'k'},{0xD0,0x94,'l'},{0xD0,0xAF,'z'},
-                {0xD0,0xA7,'x'},{0xD0,0xA1,'c'},{0xD0,0x9C,'v'},{0xD0,0x98,'b'},
-                {0xD0,0xA2,'n'},{0xD0,0xAC,'m'},
-                {0,0,0}
-            };
-            for (int i = 0; map[i].c1; ++i)
-                if (map[i].c1 == b1 && map[i].c2 == b2) return map[i].lat;
-            return -1;
+    struct KeyEvent {
+        WORD vk;       // Virtual Key Code (независимо от раскладки)
+        WCHAR uch;     // Unicode символ (зависит от раскладки)
+    };
+
+    static KeyEvent readKey() {
+        HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+        INPUT_RECORD ir;
+        DWORD read;
+        while (true) {
+            ReadConsoleInputW(hin, &ir, 1, &read);
+            if (ir.EventType == KEY_EVENT && ir.Event.KeyEvent.bKeyDown) {
+                return { ir.Event.KeyEvent.wVirtualKeyCode,
+                         ir.Event.KeyEvent.uChar.UnicodeChar };
+            }
         }
-        if (first >= 'A' && first <= 'Z') return first + 32;
-        return first;
+    }
+
+    // Проверяет есть ли нажатая клавиша в буфере (неблокирующая)
+    static bool keyAvailable() {
+        HANDLE hin = GetStdHandle(STD_INPUT_HANDLE);
+        DWORD count = 0;
+        GetNumberOfConsoleInputEvents(hin, &count);
+        if (count == 0) return false;
+        // Проверяем есть ли среди событий KEY_EVENT с bKeyDown
+        std::vector<INPUT_RECORD> buf(count);
+        DWORD read = 0;
+        PeekConsoleInputW(hin, buf.data(), count, &read);
+        for (DWORD i = 0; i < read; ++i)
+            if (buf[i].EventType == KEY_EVENT && buf[i].Event.KeyEvent.bKeyDown)
+                return true;
+        // Нет нужных событий — вычитываем мусор чтобы не зависнуть
+        INPUT_RECORD dummy; DWORD d;
+        ReadConsoleInputW(hin, &dummy, 1, &d);
+        return false;
+    }
+
+    // ============================================================
+    // Нормализует VirtualKeyCode -> строчная латинская буква.
+    // Работает независимо от раскладки клавиатуры.
+    // Возвращает -1 для неподходящих клавиш.
+    // ============================================================
+    static int normalizeKey(WORD vk) {
+        // Буквы A-Z: VK_A=0x41 .. VK_Z=0x5A
+        if (vk >= 0x41 && vk <= 0x5A) return vk - 0x41 + 'a';
+        // Цифры 0-9 (основная клавиатура): VK_0=0x30 .. VK_9=0x39
+        if (vk >= 0x30 && vk <= 0x39) return vk - 0x30 + '0';
+        // Цифры нумпада: VK_NUMPAD0=0x60 .. VK_NUMPAD9=0x69
+        if (vk >= VK_NUMPAD0 && vk <= VK_NUMPAD9) return vk - VK_NUMPAD0 + '0';
+        return -1;
     }
 
     // ============================================================
@@ -273,22 +296,20 @@ public:
                 std::string num = "[" + std::to_string(i + 1) + "] ";
                 printCentered(startRow + i, prefix + num + items[i], col);
             }
-            // неблокирующая проверка ресайза через kbhit
-            while (!_kbhit()) {
-                if (sizeChanged(prevSz)) return -2; // сигнал перерисовки
+            // неблокирующая проверка ресайза
+            while (!keyAvailable()) {
+                if (sizeChanged(prevSz)) return -2;
                 Sleep(50);
             }
-            int k = _getch();
-            if (k == 27) return -1;
-            if (k == 13) return sel;
-            if (k == 0 || k == 224) {
-                int k2 = _getch();
-                if (k2 == 72) sel = (sel - 1 + n) % n;
-                if (k2 == 80) sel = (sel + 1) % n;
-            }
-            // цифровые шорткаты
-            if (k >= '1' && k <= '9') {
-                int idx = k - '1';
+            KeyEvent ke = readKey();
+            if (ke.vk == VK_ESCAPE) return -1;
+            if (ke.vk == VK_RETURN) return sel;
+            if (ke.vk == VK_UP)   { sel = (sel - 1 + n) % n; continue; }
+            if (ke.vk == VK_DOWN) { sel = (sel + 1) % n;     continue; }
+            // нормализуем по VK — работает при любой раскладке
+            int nk = normalizeKey(ke.vk);
+            if (nk >= '1' && nk <= '9') {
+                int idx = nk - '1';
                 if (idx < n) return idx;
             }
         }
@@ -329,7 +350,8 @@ public:
             setCursor(indent,tableRow+2); setColor(Color::ERROR_CLR);
             std::cout<<"  Заказы не найдены.";
             setColor(Color::DEFAULT);
-            _getch(); return -1;
+            readKey();
+            return -1;
         }
 
         SYSTEMTIME st; GetLocalTime(&st);
@@ -371,24 +393,23 @@ public:
         COORD prevSz = getConsoleSize();
         while (true) {
             // неблокирующая проверка ресайза
-            while (!_kbhit()) {
-                if (sizeChanged(prevSz)) return -3; // сигнал ресайза
+            while (!keyAvailable()) {
+                if (sizeChanged(prevSz)) return -3;
                 Sleep(50);
             }
-            int k = _getch();
-            if (k == 27) return -1;
-            if (k == 13) return sel;
-            if (k == 0 || k == 224) {
-                int k2 = _getch();
+            KeyEvent ke = readKey();
+            if (ke.vk == VK_ESCAPE) return -1;
+            if (ke.vk == VK_RETURN) return sel;
+            if (ke.vk == VK_UP || ke.vk == VK_DOWN) {
                 int prev = sel;
-                if (k2 == 72) sel = (sel - 1 + (int)orders.size()) % (int)orders.size();
-                if (k2 == 80) sel = (sel + 1) % (int)orders.size();
+                if (ke.vk == VK_UP)   sel = (sel - 1 + (int)orders.size()) % (int)orders.size();
+                if (ke.vk == VK_DOWN) sel = (sel + 1) % (int)orders.size();
                 if (sel != prev) drawRows();
                 continue;
             }
-            // проверяем extraKeys — нормализуем через тот же маппинг
-            int nk = normalizeKey(k);
-            if (nk < 0) continue; // неизвестная UTF-8 последовательность
+            // проверяем extraKeys по VK — работает при любой раскладке
+            int nk = normalizeKey(ke.vk);
+            if (nk < 0) continue;
             char lk = (char)nk;
             for (char ek : extraKeys) {
                 if (lk == ek) { sel = -(int)(unsigned char)ek; return -2; }
