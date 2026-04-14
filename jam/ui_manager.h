@@ -138,6 +138,38 @@ public:
             }
         }
     }
+    static bool inputPasswordESC(int row, const std::string& label, std::string& result) {
+        showCursor();
+        COORD sz = getConsoleSize();
+        int col = (sz.X - 40) / 2;
+        if (col < 0) col = 0;
+        int lw = visualWidth(label);
+        setCursor(col, row); setColor(Color::HIGHLIGHT);
+        std::cout << label;
+        setColor(Color::DEFAULT);
+        result.clear();
+        while (true) {
+            int stars = (int)result.size(); // пароль ASCII, звёздочки 1:1
+            setCursor(col + lw, row);
+            std::cout << std::string(stars, '*') << ' ';
+            setCursor(col + lw + stars, row);
+            int ch = _getch();
+            if (ch == 27) { hideCursor(); return false; }
+            if (ch == 13) { hideCursor(); return true;  }
+            if (ch == 8) {
+                if (!result.empty()) {
+                    setCursor(col + lw, row);
+                    std::cout << std::string(stars + 1, ' ');
+                    result.pop_back();
+                }
+            } else if (ch == 0 || ch == 224) {
+                _getch(); // стрелки и спец. клавиши — игнорируем
+            } else if (ch >= 32 && ch < 127) {
+                result += (char)ch;
+            }
+        }
+    }
+
     static std::string trimVisual(const std::string& s, int maxW) {
         int width = 0;
         size_t i = 0;

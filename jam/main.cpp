@@ -237,8 +237,8 @@ std::string screenLogin(UserManager& um) {
     UIManager::printHLine(r+1, 30, '-', Color::DIM);
     UIManager::printCentered(r+2, "[ESC] на любом поле — назад", Color::DIM);
     std::string login, password;
-    if (!UIManager::inputStringESC(r+4, "  Логин:    ", login))    return "";
-    if (!UIManager::inputStringESC(r+6, "  Пароль:   ", password)) return "";
+    if (!UIManager::inputStringESC(r+4,  "  Логин:    ", login))    return "";
+    if (!UIManager::inputPasswordESC(r+6, "  Пароль:   ", password)) return "";
     if (um.loginUser(login, password)) {
         UIManager::printSuccess(r+8, "Авторизация успешна!");
         UIManager::waitKey(r+10);
@@ -332,8 +332,8 @@ void screenRegister(UserManager& um) {
     std::string fullName, login, password, confirm;
     if (!UIManager::inputStringESC(r+4, "  Ваше ФИО:          ", fullName))  return;
     if (!UIManager::inputStringESC(r+6, "  Придумайте логин:  ", login))     return;
-    if (!UIManager::inputStringESC(r+8, "  Придумайте пароль: ", password))  return;
-    if (!UIManager::inputStringESC(r+10,"  Повторите пароль:  ", confirm))   return;
+    if (!UIManager::inputPasswordESC(r+8, "  Придумайте пароль: ", password))  return;
+    if (!UIManager::inputPasswordESC(r+10,"  Повторите пароль:  ", confirm))   return;
     if (password != confirm) {
         UIManager::printError(r+12, "Пароли не совпадают!");
         UIManager::waitKey(r+14);
