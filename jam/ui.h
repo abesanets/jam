@@ -1,4 +1,6 @@
 #pragma once
+
+// ui.h — консольный интерфейс (WinAPI: курсор, цвета, ввод, меню, таблицы).
 #include <windows.h>
 #include <conio.h> // нужен для _getch в inputStringESC
 #include <iostream>
@@ -21,7 +23,7 @@ namespace Color {
     const WORD OVERDUE   = FOREGROUND_RED | FOREGROUND_INTENSITY;
 }
 
-class UIManager {
+class Ui {
 public:
     static COORD getConsoleSize() {
         CONSOLE_SCREEN_BUFFER_INFO csbi;

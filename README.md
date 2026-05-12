@@ -10,7 +10,7 @@
 g++ -o jam.exe jam/main.cpp -std=c++14 -finput-charset=UTF-8
 ```
 
-Требуется MinGW/GCC. Запуск: `jam.exe` из корня проекта (рядом с `users.txt` и `orders.txt`).
+Требуется MinGW/GCC. Запуск: `jam.exe` из корня проекта (рядом с `users.jam` и `orders.jam` — фирменное расширение, внутри по-прежнему текстовые строки UTF-8 после расшифровки).
 
 ---
 
@@ -20,13 +20,16 @@ g++ -o jam.exe jam/main.cpp -std=c++14 -finput-charset=UTF-8
 ├── jam/
 │   ├── main.cpp          — точка входа, все экраны и логика навигации
 │   ├── models.h          — структуры данных (User, Order)
-│   ├── order_manager.h   — CRUD заказов, хранение в orders.txt
-│   ├── user_manager.h    — регистрация/авторизация, хранение в users.txt
-│   └── ui_manager.h      — отрисовка UI, навигация, цвета
-├── orders.txt            — база заказов (открытый текст, pipe-разделитель)
-├── users.txt             — база пользователей (XOR+hex шифрование)
+│   ├── storage.h         — XOR+hex, escape полей, даты дедлайна, UserManager, OrderManager
+│   └── ui.h              — консольный UI (класс `Ui`)
+├── tools/
+│   └── gen_jam_seed.py   — генерация примеров users.jam / orders.jam (тот же XOR, UTF-8)
+├── orders.jam            — по строке на заказ: hex(XOR(...)), внутри 9 полей с escape
+├── users.jam             — по строке на пользователя: hex(XOR(...)), внутри login|pass|имя с escape
 └── jam.exe               — скомпилированный бинарник
 ```
+
+**Демо-аккаунты** (после `python tools/gen_jam_seed.py`): `egorych`/`jam1`, `anatoliy`/`jam2`, `stepanych`/`jam3`, `mikhalych`/`jam4`, `valentin`/`jam5` — в интерфейсе: Егорыч, Анатолий, Степаныч, Михалыч, Валентин.
 
 ---
 
@@ -106,22 +109,19 @@ g++ -o jam.exe jam/main.cpp -std=c++14 -finput-charset=UTF-8
 
 ## Хранение данных
 
-### orders.txt
-Каждая строка — один заказ, поля разделены `|`:
-```
-id|ФИО клиента|телефон|описание|цена|статус|дата приёма|дедлайн|мастер
-```
-Пример:
-```
-3|Сидорова Елена Павловна|+7-926-555-11-22|Серьги золото 750|28900|В работе|20.03.2026|10.04.2026|Александрович
-```
+### orders.jam
+Расширение **`.jam`** — только имя файла (можно открыть в блокноте: там hex-строки). Формат тот же, что раньше у `orders.txt`.
 
-### users.txt
-Каждая строка — один пользователь. Все три поля зашифрованы XOR+hex:
-```
-hex(login)|hex(password)|hex(fullName)
-```
-Шифрование: XOR каждого байта с циклическим ключом `J4M_s3cr3t_k3y!`, результат кодируется в hex.
+Каждая строка — `hex(XOR(UTF-8_строка_заказа))` без символа `|` в файле. Ключ XOR — `JamFileCrypto::XOR_KEY` в `jam/storage.h`.
+
+Внутри после расшифровки — **9 полей** с разделителем `|`; символы `|` и `\` в данных экранируются как `\|` и `\\`.
+
+**Дедлайн при вводе** — несколько форматов, в логике используется **ДД.ММ.ГГГГ** (`parseNormalizeDeadline` в `storage.h`).
+
+Если рядом лежит только старый **`orders.txt`**, он **ещё читается** при первом запуске; при сохранении создаётся **`orders.jam`**.
+
+### users.jam
+Аналогично: одна hex-строка на пользователя (`логин|пароль|имя` с escape). Старый **`users.txt`** читается, если **`users.jam`** отсутствует; после сохранения данные уходят в **`.jam`**.
 
 ---
 
@@ -133,41 +133,30 @@ hex(login)|hex(password)|hex(fullName)
 - `Order` — все поля заказа
 - `ORDER_STATUSES[]` — массив допустимых статусов
 
-### order_manager.h — класс `OrderManager`
-Загружает заказы из файла при старте, держит в памяти, сохраняет при каждом изменении.
+### storage.h — `OrderManager`, `UserManager`, сохранение
+- `JamFileCrypto` — XOR+hex, ключ `XOR_KEY`.
+- `escapeStorageField` / `splitStorageLine` — безопасный `|` в полях.
+- `parseNormalizeDeadline` — ввод даты в разных форматах → `ДД.ММ.ГГГГ`.
+- `OrderManager` — CRUD заказов, `orders.jam` (при отсутствии — чтение из `orders.txt`).
+- `UserManager` — регистрация/вход, `users.jam` (при отсутствии — чтение из `users.txt`).
 
-| Метод | Описание |
-|-------|----------|
-| `addOrder(...)` | Создать заказ, вернуть ID |
-| `getAllOrders()` | Все заказы |
-| `findById(id)` | Указатель на заказ по ID |
-| `updateStatus(id, status)` | Сменить статус |
-| `updateOrder(id, ...)` | Обновить поля |
-| `deleteOrder(id)` | Удалить |
-| `getFiltered(status, overdue, sort)` | Фильтрация и сортировка |
+| Класс / функция | Назначение |
+|-----------------|------------|
+| `OrderManager` | Заказы: `addOrder`, `getAllOrders`, `findById`, `updateStatus`, `updateOrder`, `deleteOrder`, `getFiltered` |
+| `UserManager` | Пользователи: `registerUser`, `loginUser`, `getFullName` |
+| `parseNormalizeDeadline` | Нормализация дедлайна для экранов ввода |
 
-### user_manager.h — класс `UserManager`
-Аналогично: загрузка при старте, шифрование при сохранении.
-
-| Метод | Описание |
-|-------|----------|
-| `registerUser(login, pass, name)` | Регистрация, проверка уникальности логина |
-| `loginUser(login, pass)` | Проверка пары логин/пароль |
-| `getFullName(login)` | Получить ФИО по логину |
-
-### ui_manager.h — класс `UIManager`
-Все методы статические. Работает напрямую с WinAPI (`SetConsoleCursorPosition`, `SetConsoleTextAttribute`).
-
-Ключевые методы:
+### ui.h — класс `Ui`
+Все методы статические. WinAPI: `SetConsoleCursorPosition`, `SetConsoleTextAttribute`, `ReadConsoleInputW`.
 
 | Метод | Описание |
 |-------|----------|
 | `selectMenu(items, row)` | Меню со стрелками, номерами и Enter |
-| `selectFromTable(orders, row, sel, extraKeys)` | Таблица с навигацией, возвращает индекс или код доп. клавиши |
-| `normalizeKey(ch)` | UTF-8 кириллица → латиница (QWERTY-маппинг) |
-| `inputStringESC(row, label, result)` | Ввод строки с поддержкой Backspace и ESC |
-| `drawOrderDetail(order, row)` | Детальная карточка заказа |
-| `printCentered(row, text, color)` | Центрированный вывод с цветом |
+| `selectFromTable(orders, row, sel, extraKeys)` | Таблица с навигацией |
+| `normalizeKey(vk)` | VK → латиница для горячих клавиш |
+| `inputStringESC` / `inputPasswordESC` | Ввод с Backspace и ESC |
+| `drawOrderDetail` / `drawLogo` | Карточка заказа, логотип |
+| `printCentered` | Центрированный вывод с цветом |
 
 ### Цветовая схема
 
